@@ -4,7 +4,7 @@ import { WorkflowFailedError } from '@temporalio/client'
 import { verifyEmailWorkflow } from './workflows'
 import { getTemporalClient } from './temporalClient'
 import { generateMessageFromTemplate } from './utils/messageGenerator'
-import { parseOptionalCountryCode } from './utils/countryCode'
+import { parseOptionalLeadFields } from './utils/leadFields'
 import { runTemporalWorker } from './worker'
 const prisma = new PrismaClient()
 const app = express()
@@ -205,12 +205,12 @@ app.post('/leads/bulk', async (req: Request, res: Response) => {
     const acceptedLeads: typeof validLeads = []
 
     for (const lead of validLeads) {
-      const countryCode = parseOptionalCountryCode(lead.countryCode)
-      if (!countryCode.ok) {
-        errors.push({ lead, error: countryCode.error })
+      const optionalFields = parseOptionalLeadFields(lead)
+      if (!optionalFields.ok) {
+        errors.push({ lead, error: optionalFields.errors.join('; ') })
         continue
       }
-      acceptedLeads.push({ ...lead, countryCode: countryCode.value })
+      acceptedLeads.push({ ...lead, ...optionalFields.value })
     }
 
     const existingLeads = await prisma.lead.findMany({
@@ -242,6 +242,9 @@ app.post('/leads/bulk', async (req: Request, res: Response) => {
             jobTitle: lead.jobTitle ? lead.jobTitle.trim() : null,
             countryCode: lead.countryCode,
             companyName: lead.companyName ? lead.companyName.trim() : null,
+            phoneNumber: lead.phoneNumber,
+            yearsAtCompany: lead.yearsAtCompany,
+            linkedinUrl: lead.linkedinUrl,
           },
         })
         importedCount++

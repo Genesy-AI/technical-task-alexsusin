@@ -1,0 +1,12 @@
+firstName,lastName,email,jobTitle,countryCode,companyName,phoneNumber,yearsAtCompany,linkedinUrl
+Ada,Lovelace,ada.lovelace@analytical.io,Chief Mathematician,GB,Analytical Engines,+44 20 7946 0958,12,https://www.linkedin.com/in/alexsusin
+Grace,Hopper,grace.hopper@cobol.dev,Rear Admiral,US,Navy Computing,(202) 555-0147,25,linkedin.com/in/alexsusin
+Alan,Turing,alan.turing@bletchley.uk,Cryptanalyst,GB,Bletchley Park,+44-1908-640404x123,6,https://uk.linkedin.com/in/alexsusin/
+Margaret,Hamilton,margaret.hamilton@apollo.space,Software Engineering Lead,US,Apollo Guidance,617.555.0199,0,www.linkedin.com/in/alexsusin?trk=public_profile
+Katherine,Johnson,katherine.johnson@nasa.example,Research Mathematician,US,NASA Langley,,33,
+Hedy,Lamarr,hedy.lamarr@frequency.hop,Inventor,AT,Spread Spectrum Labs,+43 1 234 5678,,
+Clara,Campoamor,clara.campoamor@cortes.es,Legal Counsel,ES,Cortes Constituyentes,+34 612 345 678,4,https://es.linkedin.com/in/alexsusin
+Linus,Torvalds,linus.torvalds@kernel.example,Kernel Maintainer,FI,Linux Foundation,call me maybe,30,https://www.linkedin.com/in/alexsusin
+Barbara,Liskov,barbara.liskov@mit.example,Professor,US,MIT CSAIL,+1 617 555 0123,two,https://www.linkedin.com/in/alexsusin
+Dennis,Ritchie,dennis.ritchie@bell.example,Researcher,US,Bell Labs,+1 908 555 0100,40,https://twitter.com/dmr
+Frances,Allen,frances.allen@ibm.example,Compiler Researcher,US,IBM Research,12345,-3,https://www.linkedin.com/company/ibm

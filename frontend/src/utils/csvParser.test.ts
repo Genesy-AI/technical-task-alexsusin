@@ -68,6 +68,7 @@ John,Doe,john.doe@example.com,Developer,US,Tech Corp`
       companyName: 'Tech Corp',
       isValid: true,
       errors: [],
+      fieldErrors: {},
       rowIndex: 2,
     })
   })
@@ -269,6 +270,106 @@ John,Doe,john@example.com,${countryCode}`)[0]
         'XXX',
         'XXX',
       ])
+    })
+  })
+
+  describe('phoneNumber, yearsAtCompany and linkedinUrl', () => {
+    const parseRow = (headers: string, values: string) =>
+      parseCsv(`firstName,lastName,email,${headers}
+John,Doe,john@example.com,${values}`)[0]
+
+    it('parses and normalizes valid values', () => {
+      const lead = parseRow(
+        'phoneNumber,yearsAtCompany,linkedinUrl',
+        '+34 612 345 678,4,linkedin.com/in/john-doe/'
+      )
+      expect(lead.isValid).toBe(true)
+      expect(lead.phoneNumber).toBe('+34 612 345 678')
+      expect(lead.yearsAtCompany).toBe('4')
+      expect(lead.linkedinUrl).toBe('https://www.linkedin.com/in/john-doe')
+    })
+
+    it('keeps the fields optional', () => {
+      const lead = parseRow('phoneNumber,yearsAtCompany,linkedinUrl', ',,')
+      expect(lead.isValid).toBe(true)
+      expect(lead.phoneNumber).toBeUndefined()
+      expect(lead.yearsAtCompany).toBeUndefined()
+      expect(lead.linkedinUrl).toBeUndefined()
+    })
+
+    it('accepts header aliases', () => {
+      const lead = parseRow(
+        'Phone,Years At Current Company,LinkedIn',
+        '(731)123-9702,2,https://www.linkedin.com/in/john-doe'
+      )
+      expect(lead.phoneNumber).toBe('(731)123-9702')
+      expect(lead.yearsAtCompany).toBe('2')
+      expect(lead.linkedinUrl).toBe('https://www.linkedin.com/in/john-doe')
+    })
+
+    it('does not read yearsInRole as years at company', () => {
+      const lead = parseRow('yearsInRole', '2')
+      expect(lead.yearsAtCompany).toBeUndefined()
+      expect(lead.isValid).toBe(true)
+    })
+
+    it('marks the row invalid and keeps the original text for invalid values', () => {
+      const lead = parseRow('phoneNumber,yearsAtCompany,linkedinUrl', 'call me,two,https://twitter.com/jd')
+      expect(lead.isValid).toBe(false)
+      expect(lead.phoneNumber).toBe('call me')
+      expect(lead.yearsAtCompany).toBe('two')
+      expect(lead.linkedinUrl).toBe('https://twitter.com/jd')
+      expect(lead.errors).toEqual([
+        'Invalid phone number "call me"',
+        'Invalid years at company "two" (expected a whole number between 0 and 80)',
+        'Invalid LinkedIn profile URL "https://twitter.com/jd" (expected https://www.linkedin.com/in/<profile>)',
+      ])
+    })
+
+    it('keys each error by the field it belongs to', () => {
+      const lead = parseCsv(`firstName,lastName,email,countryCode,phoneNumber
+,Doe,not-an-email,XXX,abc`)[0]
+      expect(lead.fieldErrors).toEqual({
+        firstName: 'First name is required',
+        email: 'Invalid email format',
+        countryCode: 'Invalid country code "XXX" (expected ISO 3166-1 alpha-2, e.g. ES)',
+        phoneNumber: 'Invalid phone number "abc"',
+      })
+    })
+
+    it('lists required-field errors before optional-field errors', () => {
+      const lead = parseCsv(`firstName,lastName,email,phoneNumber
+,Doe,john@example.com,abc`)[0]
+      expect(lead.errors).toEqual(['First name is required', 'Invalid phone number "abc"'])
+    })
+
+    it('parses the new-fields sample file', () => {
+      const csv = readFileSync(resolve(__dirname, '../../../docs/leads-new-fields.csv'), 'utf-8')
+      const result = parseCsv(csv)
+      expect(result).toHaveLength(11)
+      expect(result.filter((lead) => lead.isValid).map((lead) => lead.lastName)).toEqual([
+        'Lovelace',
+        'Hopper',
+        'Turing',
+        'Hamilton',
+        'Johnson',
+        'Lamarr',
+        'Campoamor',
+      ])
+      expect(result.filter((lead) => !lead.isValid).map((lead) => lead.lastName)).toEqual([
+        'Torvalds',
+        'Liskov',
+        'Ritchie',
+        'Allen',
+      ])
+    })
+
+    it('parses every row of the original sample files', () => {
+      for (const file of ['leads-ok-1.csv', 'leads-ok-2.csv', 'leads-ok-3.csv']) {
+        const csv = readFileSync(resolve(__dirname, '../../../docs', file), 'utf-8')
+        const invalid = parseCsv(csv).filter((lead) => !lead.isValid)
+        expect(invalid.map((lead) => lead.errors)).toEqual([])
+      }
     })
   })
 })

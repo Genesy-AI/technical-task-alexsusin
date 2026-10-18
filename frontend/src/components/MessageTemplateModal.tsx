@@ -1,6 +1,7 @@
-import { FC, useState, useEffect, useCallback, useRef } from 'react'
+import { FC, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { LEAD_TEMPLATE_FIELDS, LeadTemplateField } from '@tinyenginy/shared'
 import toast from 'react-hot-toast'
 import { api } from '../api'
 
@@ -18,6 +19,7 @@ export const MessageTemplateModal: FC<MessageTemplateModalProps> = ({
   selectedLeadsCount,
 }) => {
   const [template, setTemplate] = useState('')
+  const [fieldQuery, setFieldQuery] = useState('')
   const [generationResult, setGenerationResult] = useState<{
     success: boolean
     generatedCount: number
@@ -74,6 +76,7 @@ export const MessageTemplateModal: FC<MessageTemplateModalProps> = ({
     if (!generateMessagesMutation.isPending) {
       onClose()
       setTemplate('')
+      setFieldQuery('')
       setGenerationResult(null)
     }
   }, [generateMessagesMutation.isPending, onClose])
@@ -106,7 +109,19 @@ export const MessageTemplateModal: FC<MessageTemplateModalProps> = ({
     }
   }, [isOpen, handleClose])
 
-  const availableFields = ['firstName', 'lastName', 'email', 'jobTitle', 'companyName', 'countryCode']
+  // Fields come from the shared catalog (the same one the backend resolves), grouped and searchable so the
+  // picker keeps working as the list grows.
+  const fieldGroups = useMemo(() => {
+    const query = fieldQuery.trim().toLowerCase()
+    const groups = new Map<string, LeadTemplateField[]>()
+    for (const field of LEAD_TEMPLATE_FIELDS) {
+      if (query && !field.label.toLowerCase().includes(query) && !field.key.toLowerCase().includes(query)) {
+        continue
+      }
+      groups.set(field.group, [...(groups.get(field.group) ?? []), field])
+    }
+    return [...groups]
+  }, [fieldQuery])
 
   const insertField = (field: string) => {
     if (textareaRef.current) {
@@ -156,18 +171,53 @@ export const MessageTemplateModal: FC<MessageTemplateModalProps> = ({
                 Message Template
               </label>
               <div className="space-y-3">
-                <div className="flex flex-wrap gap-2">
-                  <span className="text-sm text-gray-600">Insert field:</span>
-                  {availableFields.map((field) => (
-                    <button
-                      key={field}
-                      type="button"
-                      onClick={() => insertField(field)}
-                      className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded hover:bg-blue-200 transition-colors"
-                    >
-                      {`{${field}}`}
-                    </button>
-                  ))}
+                <div className="rounded-md border border-gray-200 p-3 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-gray-600">Insert field</span>
+                    <input
+                      type="search"
+                      value={fieldQuery}
+                      onChange={(e) => setFieldQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        // Enter inserts the first match instead of submitting the form.
+                        if (e.key !== 'Enter') return
+                        e.preventDefault()
+                        const firstMatch = fieldGroups[0]?.[1][0]
+                        if (!firstMatch) return
+                        insertField(firstMatch.key)
+                        setFieldQuery('')
+                      }}
+                      placeholder="Search fields..."
+                      aria-label="Search fields"
+                      className="w-48 px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  {fieldGroups.length === 0 ? (
+                    <p className="text-sm text-gray-500">No fields match "{fieldQuery}"</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {fieldGroups.map(([group, fields]) => (
+                        <div key={group}>
+                          <div className="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
+                            {group}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {fields.map((field) => (
+                              <button
+                                key={field.key}
+                                type="button"
+                                onClick={() => insertField(field.key)}
+                                title={`Inserts {${field.key}}`}
+                                className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded hover:bg-blue-200 transition-colors"
+                              >
+                                {field.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <textarea
                   ref={textareaRef}

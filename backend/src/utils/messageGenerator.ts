@@ -1,37 +1,25 @@
-export interface Lead {
-  firstName: string
-  lastName?: string | null
-  email?: string | null
-  jobTitle?: string | null
-  companyName?: string | null
-  countryCode?: string | null
-}
+import { isLeadTemplateFieldKey, LeadTemplateFieldKey } from '@tinyenginy/shared'
+
+// Any lead-shaped object works: only the keys of the shared template field catalog are read.
+export type Lead = { firstName: string } & Partial<Record<LeadTemplateFieldKey, string | number | null>>
 
 export function generateMessageFromTemplate(template: string, lead: Lead): string {
   let message = template
-
-  const availableFields = {
-    firstName: lead.firstName,
-    lastName: lead.lastName,
-    email: lead.email,
-    jobTitle: lead.jobTitle,
-    companyName: lead.companyName,
-    countryCode: lead.countryCode,
-  }
 
   const templateVariables = template.match(/\{(\w+)\}/g) || []
 
   for (const variable of templateVariables) {
     const fieldName = variable.slice(1, -1)
 
-    if (fieldName in availableFields) {
-      const fieldValue = availableFields[fieldName as keyof typeof availableFields]
+    if (isLeadTemplateFieldKey(fieldName)) {
+      const fieldValue = lead[fieldName]
 
       if (fieldValue === null || fieldValue === undefined || fieldValue === '') {
         throw new Error(`Missing required field: ${fieldName}`)
       }
 
-      message = message.replace(new RegExp(`\\{${fieldName}\\}`, 'g'), fieldValue)
+      // Replacer function so "$" sequences in values are inserted literally.
+      message = message.replace(new RegExp(`\\{${fieldName}\\}`, 'g'), () => String(fieldValue))
     } else {
       throw new Error(`Unknown field in template: ${fieldName}`)
     }

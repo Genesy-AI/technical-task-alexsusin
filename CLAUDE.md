@@ -22,7 +22,7 @@ Shared (`cd shared`): `pnpm build` (tsc to `dist/`, which is gitignored), `pnpm 
 
 Frontend (`cd frontend`):
 - `pnpm dev`: Vite. Reads `VITE_API_URL` from `frontend/.env` (`http://localhost:4000`) and throws at startup if it is unset
-- `pnpm build`: `tsc -b && vite build`. Currently fails on a type error in `src/api/mutations/useApiMutation.ts` (the optimistic lead is missing `emailVerified`)
+- `pnpm build`: `tsc -b && vite build`
 - `pnpm lint`: ESLint, zero warnings allowed. Currently does not run, because the config is legacy `.eslintrc.cjs` while ESLint is v9
 - `pnpm test`: vitest in jsdom with `src/test/setup.ts`. Single file: `pnpm vitest run src/utils/csvParser.test.ts`
 
@@ -33,7 +33,9 @@ Both projects use Prettier (`pnpm format`): no semicolons, single quotes, printW
 ### Shared package
 - `shared/` is published to the other two projects as `@tinyenginy/shared` through `link:../shared`. Put code there when both backend and frontend need it (for example validation that runs on the client and is enforced again on the server).
 - It compiles to ESM (`"type": "module"`, NodeNext, so relative imports need `.js` extensions). The CommonJS backend loads it with Node's `require(esm)`, which needs Node 22.12 or later. Keep it free of top-level `await` and runtime dependencies.
-- It currently holds the ISO 3166-1 alpha-2 country master (`src/countries.ts`, 249 assigned codes, generated from a public dataset) and the helpers `normalizeCountryCode`, `isValidCountryCode`, `getCountryName` and `invalidCountryCodeMessage`.
+- `src/countries.ts` + `src/countryCode.ts`: the ISO 3166-1 alpha-2 country master (249 assigned codes, generated from a public dataset) and its helpers.
+- `src/leadFields.ts`: parsers for the optional `phoneNumber`, `yearsAtCompany` and `linkedinUrl` fields. They return `{ ok, value | error }`, map empty values to null and normalize valid input (LinkedIn URLs become `https://www.linkedin.com/in/<handle>`).
+- `src/templateFields.ts`: `LEAD_TEMPLATE_FIELDS`, the catalog of `{placeholders}` allowed in message templates (key, label, group). The backend generator and the frontend field picker both read it.
 
 ### Backend
 - `src/index.ts` holds the whole Express API (every `/leads` route, inline CORS, Prisma client) and also calls `runTemporalWorker()`. One process serves both HTTP and the Temporal worker.
@@ -44,17 +46,17 @@ Both projects use Prettier (`pnpm format`): no semicolons, single quotes, printW
   - The API reuses one Temporal client per process (`src/temporalClient.ts`).
   - `/leads/verify-emails` runs one `client.workflow.execute` per lead in parallel and responds when all of them finish. Workflow IDs are deterministic (`verify-email-<leadId>`) with `workflowIdConflictPolicy: 'USE_EXISTING'`, so concurrent requests attach to the running execution instead of starting duplicates. Once it finishes, a new request starts a new run. The activity's bounded retry policy (3 attempts, 3s `startToCloseTimeout`) guarantees the request ends in about 11s at most. A failed lead is reported in `errors` and its `emailVerified` is left untouched.
   - The `verifyEmail` activity is a mock: `john.doe` is always invalid, `jane.smith` takes 20s (so it always exhausts its retries) and any address with `+` is invalid. Keep it as is; fixes belong in the orchestration.
-- Request validation: `countryCode` is optional, but `/leads/bulk` rejects rows whose value is not an assigned ISO code. Those rows go into the response's `errors` array through `src/utils/countryCode.ts`. Codes are stored uppercased.
-- Message templating: `src/utils/messageGenerator.ts` replaces `{fieldName}` tokens using an explicit `availableFields` whitelist, so a new lead field must be added there to be usable in templates.
+- Request validation: the optional fields (`countryCode`, `phoneNumber`, `yearsAtCompany`, `linkedinUrl`) go through `src/utils/leadFields.ts` → `parseOptionalLeadFields`. `/leads/bulk` rejects a row with any invalid optional value and reports all of its errors in the response's `errors` array.
+- Message templating: `src/utils/messageGenerator.ts` resolves `{fieldName}` tokens for the keys in the shared `LEAD_TEMPLATE_FIELDS`. An unknown key, or a field that is empty for a lead, fails that lead.
 
 ### Frontend
 - React 18, Vite, Tailwind v4 (through `@tailwindcss/vite`), TanStack Query, react-hot-toast. `main.tsx` → `Providers.tsx` (QueryClient + Toaster) → `App.tsx` → `components/LeadsList.tsx`, which is the main screen and opens `CsvImportModal` and `MessageTemplateModal`.
 - API layer: `src/api/modules/leads.ts` declares each endpoint with `endpoint<Output, Input>(method, path | pathBuilder)` from `src/api/utils.ts`. Request/response types live one file per endpoint in `src/api/types/leads/`, and are written by hand to mirror the backend. Components call `api.leads.*` directly inside `useQuery`/`useMutation`, using query key `['leads', 'getMany']`. `src/api/mutations/useApiMutation.ts` is a typed alternative that only has `leads.create` wired up.
-- CSV import: `src/utils/csvParser.ts` parses with PapaParse (headers are trimmed and lowercased), validates each row into `CsvLead` (including the country code against the shared master), and the modal posts the valid rows to `/leads/bulk`. The backend dedupes on firstName+lastName.
+- CSV import: `src/utils/csvParser.ts` parses with PapaParse (headers are trimmed and lowercased), validates each row into `CsvLead` with the shared validators (errors come both as an ordered list, `errors`, and keyed by field, `fieldErrors`), and the modal posts the valid rows to `/leads/bulk`. The backend dedupes on firstName+lastName. The preview (`components/CsvPreviewTable.tsx`) shows one row per lead with the optional fields as chips (filled, invalid or empty), plus a per-column coverage bar. Each row expands into a detail with every value and its error; invalid rows start expanded. A new optional field needs an entry in its `OPTIONAL_FIELDS`.
 
 ### Adding a lead field touches all layers
-`prisma/schema.prisma` + migration → the `/leads/bulk` (and create/update) handlers in `index.ts` → `messageGenerator.ts` `availableFields` → frontend `api/types/leads/*` → `csvParser.ts` `CsvLead` + header mapping → `LeadsList` table columns → `MessageTemplateModal`.
+`prisma/schema.prisma` + migration → a parser in `shared/src/leadFields.ts` (if it needs validation) → `backend/src/utils/leadFields.ts` and the `/leads/bulk` handler → `LEAD_TEMPLATE_FIELDS` in `shared/src/templateFields.ts` (the template picker and generator pick it up from there) → frontend `api/types/leads/*` (including the optimistic lead in `useApiMutation.ts`) → `csvParser.ts` `CsvLead` + `OPTIONAL_FIELD_HEADERS` aliases → `OPTIONAL_FIELDS` in `CsvPreviewTable.tsx` and the import mapping in `CsvImportModal` → `LeadsList` table columns.
 
 ## Known issues
 - The frontend `leads.update` sends `PUT /leads/:id`, but the backend only defines `PATCH /leads/:id`. That handler also only updates `firstName` from `name` and `email`.
-- `docs/` contains the sample CSVs (`leads-ok-*.csv`, `leads-with-errors.csv`) and the UI wireframes.
+- `docs/` contains the sample CSVs and the UI wireframes. `leads-ok-*.csv` and `leads-with-errors.csv` come with the exercise; their `yearsInRole` column is ignored on purpose, because years in the role are not years at the company. `leads-new-fields.csv` covers valid and invalid phone, years and LinkedIn values.
