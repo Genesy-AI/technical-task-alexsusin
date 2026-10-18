@@ -1,3 +1,5 @@
+import { PhoneEnrichmentStatus } from '@tinyenginy/shared'
+
 export type LeadsGetManyInput = undefined
 
 export type LeadsGetManyOutput = {
@@ -15,4 +17,6 @@ export type LeadsGetManyOutput = {
   phoneNumber: string | null
   yearsAtCompany: number | null
   linkedinUrl: string | null
+  phoneEnrichmentStatus: PhoneEnrichmentStatus | null
+  phoneEnrichmentProvider: string | null
 }[]

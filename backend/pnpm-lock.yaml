@@ -11,6 +11,9 @@ importers:
       '@prisma/client':
         specifier: ^6.15.0
         version: 6.15.0(prisma@6.15.0(typescript@5.9.2))(typescript@5.9.2)
+      '@temporalio/activity':
+        specifier: 1.13.0
+        version: 1.13.0
       '@temporalio/client':
         specifier: ^1.13.0
         version: 1.13.0
@@ -26,7 +29,13 @@ importers:
       express:
         specifier: ^5.1.0
         version: 5.1.0(supports-color@5.5.0)
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
+      '@temporalio/testing':
+        specifier: 1.13.0
+        version: 1.13.0(esbuild@0.28.2)
       '@types/express':
         specifier: ^5.0.3
         version: 5.0.3
@@ -564,6 +573,10 @@ packages:
 
   '@temporalio/proto@1.13.0':
     resolution: {integrity: sha512-jplwOQAgghdRJljTVI9Lawar4L0vGM+vT0TfxvKm+/hVf4CpPEAwvy+El9doR4wu1uYg9g94LnPmZdzoUu5qyA==}
+    engines: {node: '>= 18.0.0'}
+
+  '@temporalio/testing@1.13.0':
+    resolution: {integrity: sha512-YTOLYjg+4lKuopRMKeuUBQ5+/W/t01JKH8Gd0uJgjHIO1FaiOCMlfB2IoND9VzfjYS6UD7Wu9kCsQwdp9xtnLg==}
     engines: {node: '>= 18.0.0'}
 
   '@temporalio/worker@1.13.0':
@@ -1822,6 +1835,9 @@ packages:
     resolution: {integrity: sha512-Ux4ygGWsu2c7isFWe8Yu1YluJmqVhxqK2cLXNQA5AcC3QfbGNpM7fu0Y8b/z16pXLnFxZYvWhd3fhBY9DLmC6Q==}
     engines: {node: '>=6'}
 
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
 snapshots:
 
   '@cspotcode/source-map-support@0.8.1':
@@ -2196,6 +2212,22 @@ snapshots:
     dependencies:
       long: 5.3.2
       protobufjs: 7.6.6
+
+  '@temporalio/testing@1.13.0(esbuild@0.28.2)':
+    dependencies:
+      '@temporalio/activity': 1.13.0
+      '@temporalio/client': 1.13.0
+      '@temporalio/common': 1.13.0
+      '@temporalio/core-bridge': 1.13.0
+      '@temporalio/proto': 1.13.0
+      '@temporalio/worker': 1.13.0(esbuild@0.28.2)
+      '@temporalio/workflow': 1.13.0
+      abort-controller: 3.0.0
+    transitivePeerDependencies:
+      - '@swc/helpers'
+      - esbuild
+      - uglify-js
+      - webpack-cli
 
   '@temporalio/worker@1.13.0(esbuild@0.28.2)':
     dependencies:
@@ -3560,3 +3592,5 @@ snapshots:
       yargs-parser: 21.1.1
 
   yn@3.1.1: {}
+
+  zod@3.25.76: {}

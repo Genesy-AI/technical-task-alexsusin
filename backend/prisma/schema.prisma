@@ -8,18 +8,22 @@ datasource db {
 }
 
 model lead {
-  id             Int      @id @default(autoincrement())
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  firstName      String
-  lastName       String
-  email          String
-  jobTitle       String?
-  countryCode    String?
-  companyName    String?
-  message        String?
-  emailVerified  Boolean?
-  phoneNumber    String?
-  yearsAtCompany Int?
-  linkedinUrl    String?
+  id                      Int      @id @default(autoincrement())
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  firstName               String
+  lastName                String
+  email                   String
+  jobTitle                String?
+  countryCode             String?
+  companyName             String?
+  message                 String?
+  emailVerified           Boolean?
+  phoneNumber             String?
+  yearsAtCompany          Int?
+  linkedinUrl             String?
+  /// pending | running | found | not_found | failed (null = never enriched)
+  phoneEnrichmentStatus   String?
+  /// Display name of the provider being queried (running) or that found the phone (found)
+  phoneEnrichmentProvider String?
 }

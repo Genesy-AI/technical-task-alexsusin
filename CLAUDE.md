@@ -17,6 +17,8 @@ Backend (`cd backend`):
 - `pnpm build`: runs `tsc`
 - `pnpm test`: vitest in node env. Single file: `pnpm vitest run src/utils/messageGenerator.test.ts`. Single test: add `-t "<name>"`
 - `pnpm migrate:dev --name <name>` after editing `prisma/schema.prisma`
+- Settings: `cp config/appsettings.local.example.json config/appsettings.local.json` and fill in the phone provider keys. The API refuses to start with invalid or incomplete settings.
+- The workflow test (`src/workflows/enrichPhoneWorkflow.test.ts`) uses `@temporalio/testing`'s time-skipping server, downloaded on first run. It does not need the dev server.
 
 Shared (`cd shared`): `pnpm build` (tsc to `dist/`, which is gitignored), `pnpm test`. You rarely need to run these directly: `pnpm install` in backend or frontend installs and builds `shared` through `postinstall`, and their `dev`, `build` and `test` scripts rebuild it first. `pnpm vitest run` skips that rebuild, so after editing `shared/src` run `pnpm shared:build` (or `pnpm test`) before testing a consumer.
 
@@ -47,6 +49,13 @@ Both projects use Prettier (`pnpm format`): no semicolons, single quotes, printW
   - `/leads/verify-emails` runs one `client.workflow.execute` per lead in parallel and responds when all of them finish. Workflow IDs are deterministic (`verify-email-<leadId>`) with `workflowIdConflictPolicy: 'USE_EXISTING'`, so concurrent requests attach to the running execution instead of starting duplicates. Once it finishes, a new request starts a new run. The activity's bounded retry policy (3 attempts, 3s `startToCloseTimeout`) guarantees the request ends in about 11s at most. A failed lead is reported in `errors` and its `emailVerified` is left untouched.
   - The `verifyEmail` activity is a mock: `john.doe` is always invalid, `jane.smith` takes 20s (so it always exhausts its retries) and any address with `+` is invalid. Keep it as is; fixes belong in the orchestration.
 - Request validation: the optional fields (`countryCode`, `phoneNumber`, `yearsAtCompany`, `linkedinUrl`) go through `src/utils/leadFields.ts` → `parseOptionalLeadFields`. `/leads/bulk` rejects a row with any invalid optional value and reports all of its errors in the response's `errors` array.
+- Settings (`src/config/appSettings.ts`), .NET appsettings style: `config/appsettings.json` → `appsettings.{NODE_ENV}.json` → `appsettings.local.json` (gitignored, secrets) → env vars with `__` as separator (`PhoneEnrichment__Providers__orionConnect__Auth__Secret`, matched case-insensitively). Objects merge and arrays replace. Validated with zod at startup; use `getAppSettings()`.
+- Phone enrichment (`src/phoneEnrichment/`, `enrichPhoneWorkflow`):
+  - Providers are pure configuration under `phoneEnrichment.providers`: url, method, auth (`header`/`query`/`none` + secret), request template (`{{fullName}}`, `{{email}}`, `{{companyWebsite}}`... from `PROVIDER_INPUT_FIELDS`), response `phonePath`, timeout, optional retry override and rate limit. `providerOrder` sets the sequence. Adding a provider that fits this shape is config only.
+  - `POST /leads/enrich-phone` resolves a plan from settings (`buildPhoneEnrichmentPlan`) and starts one workflow per lead (`enrich-phone-<leadId>`, `USE_EXISTING`) with `workflow.start`, so it returns immediately. The plan travels as workflow input: running workflows are not affected by config edits.
+  - The workflow queries providers in order and stops at the first valid phone. Provider calls are activities on per-provider task queues (`phone-enrichment.<id>`) whose workers apply `maxTaskQueueActivitiesPerSecond`. 4xx except 408/429 are non-retryable, and 429 honours `Retry-After`. A provider that still fails after its retries is recorded and the next one is tried. A provider whose template needs a field the lead lacks is skipped (e.g. `companyWebsite`, derived from corporate email domains only).
+  - Progress is persisted on the lead (`phoneEnrichmentStatus`: pending/running/found/not_found/failed, and `phoneEnrichmentProvider` holding the display name). The frontend polls `getMany` every 2s while any lead is in progress. A found phone overwrites `phoneNumber`.
+  - The real provider APIs differ from the README: Nimbus answers `{ "phoneNmbr": number, "countryCode": "ES" }`, and all of them return 500 now and then.
 - Message templating: `src/utils/messageGenerator.ts` resolves `{fieldName}` tokens for the keys in the shared `LEAD_TEMPLATE_FIELDS`. An unknown key, or a field that is empty for a lead, fails that lead.
 
 ### Frontend

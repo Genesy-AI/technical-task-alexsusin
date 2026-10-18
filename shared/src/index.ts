@@ -19,3 +19,8 @@ export {
   type LeadTemplateFieldKey,
   isLeadTemplateFieldKey,
 } from './templateFields.js'
+export {
+  PHONE_ENRICHMENT_STATUSES,
+  type PhoneEnrichmentStatus,
+  isPhoneEnrichmentInProgress,
+} from './phoneEnrichment.js'

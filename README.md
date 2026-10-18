@@ -65,6 +65,7 @@ nvm use                   # Ensure the Node version from .nvmrc
 pnpm install              # Install dependencies
 pnpm migrate:dev          # Sync local SQLite with Prisma schema
 pnpm gen:prisma           # Generate Prisma client
+cp config/appsettings.local.example.json config/appsettings.local.json  # Then fill in the provider API keys
 temporal server start-dev # Starts Temporal server
 ```
 
