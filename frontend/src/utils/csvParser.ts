@@ -1,3 +1,4 @@
+import { invalidCountryCodeMessage, isValidCountryCode, normalizeCountryCode } from '@tinyenginy/shared'
 import Papa from 'papaparse'
 
 export interface CsvLead {
@@ -68,7 +69,7 @@ export const parseCsv = (content: string): CsvLead[] => {
           lead.jobTitle = trimmedValue || undefined
           break
         case 'countrycode':
-          lead.countryCode = trimmedValue || undefined
+          lead.countryCode = normalizeCountryCode(trimmedValue) || undefined
           break
         case 'companyname':
           lead.companyName = trimmedValue || undefined
@@ -87,6 +88,9 @@ export const parseCsv = (content: string): CsvLead[] => {
       errors.push('Email is required')
     } else if (!isValidEmail(lead.email)) {
       errors.push('Invalid email format')
+    }
+    if (lead.countryCode && !isValidCountryCode(lead.countryCode)) {
+      errors.push(invalidCountryCodeMessage(lead.countryCode))
     }
 
     data.push({

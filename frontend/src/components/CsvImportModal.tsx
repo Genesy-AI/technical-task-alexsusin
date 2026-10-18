@@ -2,6 +2,7 @@ import { FC, useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { getCountryName, isValidCountryCode } from '@tinyenginy/shared'
 import { api } from '../api'
 import { CsvLead, parseCsv } from '../utils/csvParser'
 
@@ -113,6 +114,9 @@ export const CsvImportModal: FC<CsvImportModalProps> = ({ isOpen, onClose }) => 
       }
       if (data.invalidLeads > 0) {
         message += ` (${data.invalidLeads} invalid leads excluded)`
+      }
+      if (data.errors.length > 0) {
+        message += ` (${data.errors.length} rejected by the server)`
       }
 
       toast.success(message)
@@ -285,6 +289,9 @@ export const CsvImportModal: FC<CsvImportModalProps> = ({ isOpen, onClose }) => 
                         Company
                       </th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                        Country
+                      </th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
                         Errors
                       </th>
                     </tr>
@@ -309,6 +316,17 @@ export const CsvImportModal: FC<CsvImportModalProps> = ({ isOpen, onClose }) => 
                         </td>
                         <td className="px-3 py-2 text-sm text-gray-900">{lead.email || '-'}</td>
                         <td className="px-3 py-2 text-sm text-gray-900">{lead.companyName || '-'}</td>
+                        <td className="px-3 py-2 text-sm">
+                          {!lead.countryCode ? (
+                            <span className="text-gray-900">-</span>
+                          ) : isValidCountryCode(lead.countryCode) ? (
+                            <span className="text-gray-900" title={getCountryName(lead.countryCode)}>
+                              {lead.countryCode}
+                            </span>
+                          ) : (
+                            <span className="font-medium text-red-600">{lead.countryCode}</span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-sm text-red-600">{lead.errors.join(', ') || '-'}</td>
                       </tr>
                     ))}

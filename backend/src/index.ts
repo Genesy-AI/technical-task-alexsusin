@@ -3,6 +3,7 @@ import express, { Request, Response } from 'express'
 import { Connection, Client } from '@temporalio/client'
 import { verifyEmailWorkflow } from './workflows'
 import { generateMessageFromTemplate } from './utils/messageGenerator'
+import { parseOptionalCountryCode } from './utils/countryCode'
 import { runTemporalWorker } from './worker'
 const prisma = new PrismaClient()
 const app = express()
@@ -199,9 +200,21 @@ app.post('/leads/bulk', async (req: Request, res: Response) => {
         .json({ error: 'No valid leads found. firstName, lastName, and email are required.' })
     }
 
+    const errors: Array<{ lead: any; error: string }> = []
+    const acceptedLeads: typeof validLeads = []
+
+    for (const lead of validLeads) {
+      const countryCode = parseOptionalCountryCode(lead.countryCode)
+      if (!countryCode.ok) {
+        errors.push({ lead, error: countryCode.error })
+        continue
+      }
+      acceptedLeads.push({ ...lead, countryCode: countryCode.value })
+    }
+
     const existingLeads = await prisma.lead.findMany({
       where: {
-        OR: validLeads.map((lead) => ({
+        OR: acceptedLeads.map((lead) => ({
           AND: [{ firstName: lead.firstName.trim() }, { lastName: lead.lastName.trim() }],
         })),
       },
@@ -211,13 +224,12 @@ app.post('/leads/bulk', async (req: Request, res: Response) => {
       existingLeads.map((lead) => `${lead.firstName.toLowerCase()}_${(lead.lastName || '').toLowerCase()}`)
     )
 
-    const uniqueLeads = validLeads.filter((lead) => {
+    const uniqueLeads = acceptedLeads.filter((lead) => {
       const key = `${lead.firstName.toLowerCase()}_${lead.lastName.toLowerCase()}`
       return !leadKeys.has(key)
     })
 
     let importedCount = 0
-    const errors: Array<{ lead: any; error: string }> = []
 
     for (const lead of uniqueLeads) {
       try {
@@ -227,7 +239,7 @@ app.post('/leads/bulk', async (req: Request, res: Response) => {
             lastName: lead.lastName.trim(),
             email: lead.email.trim(),
             jobTitle: lead.jobTitle ? lead.jobTitle.trim() : null,
-            countryCode: lead.countryCode ? lead.countryCode.trim() : null,
+            countryCode: lead.countryCode,
             companyName: lead.companyName ? lead.companyName.trim() : null,
           },
         })
@@ -243,7 +255,7 @@ app.post('/leads/bulk', async (req: Request, res: Response) => {
     res.json({
       success: true,
       importedCount,
-      duplicatesSkipped: validLeads.length - uniqueLeads.length,
+      duplicatesSkipped: acceptedLeads.length - uniqueLeads.length,
       invalidLeads: leads.length - validLeads.length,
       errors,
     })

@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
 import { describe, it, expect } from 'vitest'
 import { parseCsv, isValidEmail } from './csvParser'
 
@@ -222,5 +224,51 @@ Jane,Johnson,jane@example.com`
     expect(result[0].lastName).toBe('Doe')
     expect(result[0].email).toBe('john@example.com')
     expect(result[0].isValid).toBe(true)
+  })
+
+  describe('countryCode', () => {
+    const parseWithCountry = (countryCode: string) =>
+      parseCsv(`firstName,lastName,email,countryCode
+John,Doe,john@example.com,${countryCode}`)[0]
+
+    it('accepts valid ISO 3166-1 alpha-2 codes', () => {
+      const lead = parseWithCountry('ES')
+      expect(lead.countryCode).toBe('ES')
+      expect(lead.isValid).toBe(true)
+    })
+
+    it('normalizes lowercase codes to uppercase', () => {
+      const lead = parseWithCountry(' es ')
+      expect(lead.countryCode).toBe('ES')
+      expect(lead.isValid).toBe(true)
+    })
+
+    it('keeps the field optional', () => {
+      const lead = parseWithCountry('')
+      expect(lead.countryCode).toBeUndefined()
+      expect(lead.isValid).toBe(true)
+    })
+
+    it.each(['XXX', '12', 'UK', 'ZZ', 'Spain'])('marks the row invalid for "%s"', (code) => {
+      const lead = parseWithCountry(code)
+      expect(lead.isValid).toBe(false)
+      expect(lead.errors).toContain(
+        `Invalid country code "${code.toUpperCase()}" (expected ISO 3166-1 alpha-2, e.g. ES)`
+      )
+    })
+
+    it('flags every invalid country code in the sample error file', () => {
+      const csv = readFileSync(resolve(__dirname, '../../../docs/leads-with-errors.csv'), 'utf-8')
+      const invalidCountryRows = parseCsv(csv).filter((lead) =>
+        lead.errors.some((error) => error.startsWith('Invalid country code'))
+      )
+      expect(invalidCountryRows.map((lead) => lead.countryCode).sort()).toEqual([
+        '12',
+        'XXX',
+        'XXX',
+        'XXX',
+        'XXX',
+      ])
+    })
   })
 })
