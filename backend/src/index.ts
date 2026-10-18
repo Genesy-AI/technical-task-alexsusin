@@ -1,7 +1,8 @@
 import { PrismaClient } from '@prisma/client'
 import express, { Request, Response } from 'express'
-import { Connection, Client } from '@temporalio/client'
+import { WorkflowFailedError } from '@temporalio/client'
 import { verifyEmailWorkflow } from './workflows'
+import { getTemporalClient } from './temporalClient'
 import { generateMessageFromTemplate } from './utils/messageGenerator'
 import { parseOptionalCountryCode } from './utils/countryCode'
 import { runTemporalWorker } from './worker'
@@ -285,40 +286,53 @@ app.post('/leads/verify-emails', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'No leads found with the provided IDs' })
     }
 
-    const connection = await Connection.connect({ address: 'localhost:7233' })
-    const client = new Client({ connection, namespace: 'default' })
+    const client = await getTemporalClient()
 
-    let verifiedCount = 0
-    const results: Array<{ leadId: number; emailVerified: boolean }> = []
-    const errors: Array<{ leadId: number; leadName: string; error: string }> = []
-
-    for (const lead of leads) {
-      try {
+    // One workflow per lead: the ID is deterministic, so a repeated request while a verification is running
+    // attaches to the existing execution instead of starting a new one. Once it has finished, a new request
+    // starts a fresh verification (default reuse policy). Leads are verified in parallel so a slow one does
+    // not hold back the rest, and the bounded retry policy guarantees every workflow ends.
+    const outcomes = await Promise.allSettled(
+      leads.map(async (lead) => {
         const isVerified = await client.workflow.execute(verifyEmailWorkflow, {
           taskQueue: 'myQueue',
-          workflowId: `verify-email-${lead.id}-${Date.now()}`,
+          workflowId: `verify-email-${lead.id}`,
+          workflowIdConflictPolicy: 'USE_EXISTING',
+          workflowExecutionTimeout: '1 minute',
           args: [lead.email],
         })
 
         await prisma.lead.update({
           where: { id: lead.id },
-          data: { emailVerified: Boolean(isVerified) },
+          data: { emailVerified: isVerified },
         })
 
-        results.push({ leadId: lead.id, emailVerified: isVerified })
-        verifiedCount += 1
-      } catch (error) {
-        errors.push({
-          leadId: lead.id,
-          leadName: `${lead.firstName} ${lead.lastName}`.trim(),
-          error: error instanceof Error ? error.message : 'Unknown error',
-        })
+        return isVerified
+      })
+    )
+
+    const results: Array<{ leadId: number; emailVerified: boolean }> = []
+    const errors: Array<{ leadId: number; leadName: string; error: string }> = []
+
+    outcomes.forEach((outcome, index) => {
+      const lead = leads[index]
+      if (outcome.status === 'fulfilled') {
+        results.push({ leadId: lead.id, emailVerified: outcome.value })
+        return
       }
-    }
 
-    await connection.close()
+      console.error(`Error verifying email for lead ${lead.id}:`, outcome.reason)
+      errors.push({
+        leadId: lead.id,
+        leadName: `${lead.firstName} ${lead.lastName}`.trim(),
+        error:
+          outcome.reason instanceof WorkflowFailedError
+            ? 'The email verification provider did not respond after several attempts'
+            : 'Unexpected error while verifying the email',
+      })
+    })
 
-    res.json({ success: true, verifiedCount, results, errors })
+    res.json({ success: true, verifiedCount: results.length, results, errors })
   } catch (error) {
     console.error('Error verifying emails:', error)
     res.status(500).json({ error: 'Failed to verify emails' })

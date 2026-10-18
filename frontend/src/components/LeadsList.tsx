@@ -5,6 +5,8 @@ import { api } from '../api'
 import { MessageTemplateModal } from './MessageTemplateModal'
 import { CsvImportModal } from './CsvImportModal'
 
+const VERIFY_EMAILS_TOAST_ID = 'verify-emails'
+
 export const LeadsList: FC = () => {
   const [selectedLeads, setSelectedLeads] = useState<number[]>([])
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false)
@@ -35,19 +37,36 @@ export const LeadsList: FC = () => {
     }
   })
 
+  // The backend is idempotent per lead, so repeated clicks while a verification is running reuse the same
+  // workflows; the shared toast id keeps a single progress toast on screen.
   const verifyEmailsMutation = useMutation({
     mutationFn: async (ids: number[]) => api.leads.verifyEmails({ leadIds: ids }),
+    onMutate: (ids) => {
+      setIsEnrichDropdownOpen(false)
+      toast.loading(ids.length === 1 ? 'Verifying 1 email...' : `Verifying ${ids.length} emails...`, {
+        id: VERIFY_EMAILS_TOAST_ID,
+      })
+    },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['leads', 'getMany'] })
-      setIsEnrichDropdownOpen(false)
-      toast.success(
-        data.verifiedCount === 1
-          ? `Verified ${data.verifiedCount} email`
-          : `Verified ${data.verifiedCount} emails`
-      )
+
+      const valid = data.results.filter((result) => result.emailVerified).length
+      const invalid = data.results.length - valid
+      const summary = [`${valid} valid`, `${invalid} invalid`]
+      if (data.errors.length > 0) {
+        const failedNames = data.errors.map((error) => error.leadName).join(', ')
+        summary.push(`${data.errors.length} could not be verified (${failedNames})`)
+      }
+      const message = `Email verification finished: ${summary.join(', ')}`
+
+      if (data.errors.length === 0) {
+        toast.success(message, { id: VERIFY_EMAILS_TOAST_ID })
+      } else {
+        toast.error(message, { id: VERIFY_EMAILS_TOAST_ID, duration: 8000 })
+      }
     },
     onError: () => {
-      toast.error('Failed to verify emails. Please try again.')
+      toast.error('Failed to verify emails. Please try again.', { id: VERIFY_EMAILS_TOAST_ID })
     }
   })
 

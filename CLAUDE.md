@@ -41,7 +41,9 @@ Both projects use Prettier (`pnpm format`): no semicolons, single quotes, printW
 - Temporal:
   - `src/worker.ts` registers workflows through `workflowsPath: require.resolve('./workflows')` and activities from `./workflows/activities`, on task queue `myQueue`, namespace `default`.
   - Workflows live in `src/workflows/workflows.ts` and are re-exported from `src/workflows/index.ts`. This code runs in Temporal's deterministic sandbox, so it can only import `@temporalio/workflow` and activity *types*. I/O belongs in activities (`src/workflows/activities/`, re-exported from its `index.ts`), called through `proxyActivities` with timeouts and retry policies.
-  - `/leads/verify-emails` opens a new client connection per request and runs `client.workflow.execute` sequentially for each lead, blocking the HTTP response until every workflow finishes.
+  - The API reuses one Temporal client per process (`src/temporalClient.ts`).
+  - `/leads/verify-emails` runs one `client.workflow.execute` per lead in parallel and responds when all of them finish. Workflow IDs are deterministic (`verify-email-<leadId>`) with `workflowIdConflictPolicy: 'USE_EXISTING'`, so concurrent requests attach to the running execution instead of starting duplicates. Once it finishes, a new request starts a new run. The activity's bounded retry policy (3 attempts, 3s `startToCloseTimeout`) guarantees the request ends in about 11s at most. A failed lead is reported in `errors` and its `emailVerified` is left untouched.
+  - The `verifyEmail` activity is a mock: `john.doe` is always invalid, `jane.smith` takes 20s (so it always exhausts its retries) and any address with `+` is invalid. Keep it as is; fixes belong in the orchestration.
 - Request validation: `countryCode` is optional, but `/leads/bulk` rejects rows whose value is not an assigned ISO code. Those rows go into the response's `errors` array through `src/utils/countryCode.ts`. Codes are stored uppercased.
 - Message templating: `src/utils/messageGenerator.ts` replaces `{fieldName}` tokens using an explicit `availableFields` whitelist, so a new lead field must be added there to be usable in templates.
 

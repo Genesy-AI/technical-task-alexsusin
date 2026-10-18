@@ -36,6 +36,8 @@ export const Providers: FC<PropsWithChildren> = ({ children }) => {
             },
           },
           loading: {
+            // Loading toasts stay until they are replaced by the outcome; otherwise they inherit the 4s default.
+            duration: Infinity,
             className:
               'bg-gray-50/95 text-gray-600 border border-gray-200/30 rounded-xl shadow-xl backdrop-blur-md text-sm font-medium px-4 py-3 max-w-sm',
             iconTheme: {
